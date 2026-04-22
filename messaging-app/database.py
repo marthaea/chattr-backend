@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@localhost:5432/messaging")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:[YOUR-PASSWORD]@db.qoxbjivqrbbjzbsbccqt.supabase.co:5432/postgres")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 
