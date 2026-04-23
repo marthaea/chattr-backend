@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:GravityFalls*#1@db.qoxbjivqrbbjzbsbccqt.supabase.co:5432/postgres?ssl=require")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres.qoxbjivqrbbjzbsbccqt:GravityFalls*#1@aws-1-eu-central-1.pooler.supabase.com:6543/postgres?ssl=require")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 
