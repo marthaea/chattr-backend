@@ -18,7 +18,10 @@ if not DATABASE_URL:
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"ssl": "require"},  # force SSL regardless of URL param
+    connect_args={
+        "ssl": "require",
+        "statement_cache_size": 0,  # required for Supabase pgbouncer pooler
+    },
 )
 
 AsyncSessionLocal = async_sessionmaker(
