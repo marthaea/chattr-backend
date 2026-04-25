@@ -13,6 +13,8 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False, index=True)
     email = Column(String(100), unique=True, nullable=False)
     password_hash = Column(Text, nullable=False)
+    avatar_url = Column(Text, nullable=True)           # profile picture
+    bio = Column(String(200), nullable=True)           # short bio
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     participations = relationship("Participant", back_populates="user")
@@ -48,7 +50,10 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    content = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)       # text or Cloudinary URL
+    message_type = Column(String(20), default="text")  # text | image | audio | video | file
+    file_name = Column(String(255), nullable=True)     # original filename for downloads
+    file_size = Column(Integer, nullable=True)         # bytes
     sent_at = Column(DateTime(timezone=True), server_default=func.now())
     is_read = Column(Boolean, default=False)
 
