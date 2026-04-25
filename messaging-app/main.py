@@ -3,36 +3,37 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from database import init_db
-from routers import auth, conversations, messages
+from routers import auth, conversations, messages, users, media
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables on startup (idempotent)
     await init_db()
     yield
 
 
 app = FastAPI(
-    title="Messaging App API",
-    description="Real-time messaging backend with REST + WebSocket support",
-    version="1.0.0",
+    title="Chattr API",
+    description="Real-time messaging backend — REST + WebSocket",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # Restrict to your frontend domain in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/auth")
+app.include_router(auth.router,          prefix="/auth")
+app.include_router(users.router,         prefix="/users")
 app.include_router(conversations.router, prefix="/conversations")
-app.include_router(messages.router, prefix="/messages")
+app.include_router(messages.router,      prefix="/messages")
+app.include_router(media.router,         prefix="/media")
 
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "Messaging API is running 🚀"}
+    return {"status": "ok", "message": "Chattr API is running 🚀", "version": "2.0.0"}
