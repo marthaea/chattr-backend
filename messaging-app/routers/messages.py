@@ -5,24 +5,12 @@ from typing import List
 import json
 
 from database import get_db, AsyncSessionLocal
-from models.models import User, Message, Participant, Conversation
+from models.models import User, Message, Participant
 from schemas import MessageCreate, MessageOut
 from auth import get_current_user
 from ws_manager import manager
 
 router = APIRouter(tags=["Messages"])
-
-
-def _message_to_out(msg: Message) -> dict:
-    return {
-        "id": msg.id,
-        "conversation_id": msg.conversation_id,
-        "sender_id": msg.sender_id,
-        "sender_username": msg.sender.username,
-        "content": msg.content,
-        "sent_at": msg.sent_at.isoformat(),
-        "is_read": msg.is_read,
-    }
 
 
 async def _assert_participant(user_id: int, conversation_id: int, db: AsyncSession):
@@ -34,6 +22,22 @@ async def _assert_participant(user_id: int, conversation_id: int, db: AsyncSessi
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=403, detail="Not a participant of this conversation")
+
+
+def _build_message_out(msg: Message, sender: User) -> MessageOut:
+    return MessageOut(
+        id=msg.id,
+        conversation_id=msg.conversation_id,
+        sender_id=msg.sender_id,
+        sender_username=sender.username,
+        sender_avatar=sender.avatar_url,
+        content=msg.content,
+        message_type=msg.message_type,
+        file_name=msg.file_name,
+        file_size=msg.file_size,
+        sent_at=msg.sent_at,
+        is_read=msg.is_read,
+    )
 
 
 @router.get("/{conversation_id}", response_model=List[MessageOut])
@@ -55,20 +59,11 @@ async def get_messages(
     )
     messages = result.scalars().all()
 
-    # Eager-load senders
     out = []
     for msg in reversed(messages):
         sender_result = await db.execute(select(User).where(User.id == msg.sender_id))
-        msg.sender = sender_result.scalar_one()
-        out.append(MessageOut(
-            id=msg.id,
-            conversation_id=msg.conversation_id,
-            sender_id=msg.sender_id,
-            sender_username=msg.sender.username,
-            content=msg.content,
-            sent_at=msg.sent_at,
-            is_read=msg.is_read,
-        ))
+        sender = sender_result.scalar_one()
+        out.append(_build_message_out(msg, sender))
     return out
 
 
@@ -84,22 +79,15 @@ async def send_message(
         conversation_id=body.conversation_id,
         sender_id=current_user.id,
         content=body.content,
+        message_type=body.message_type,
+        file_name=body.file_name,
+        file_size=body.file_size,
     )
     db.add(msg)
     await db.commit()
     await db.refresh(msg)
 
-    out = MessageOut(
-        id=msg.id,
-        conversation_id=msg.conversation_id,
-        sender_id=msg.sender_id,
-        sender_username=current_user.username,
-        content=msg.content,
-        sent_at=msg.sent_at,
-        is_read=msg.is_read,
-    )
-
-    # Broadcast via WebSocket
+    out = _build_message_out(msg, current_user)
     await manager.broadcast(body.conversation_id, out.model_dump_json())
     return out
 
@@ -131,16 +119,9 @@ async def websocket_endpoint(
     conversation_id: int,
     token: str = Query(...),
 ):
-    """
-    Connect with:  ws://host/messages/ws/{conversation_id}?token=<jwt>
-    Send JSON:     {"content": "Hello!"}
-    Receive JSON:  MessageOut as JSON string
-    """
-    from auth import get_current_user as _get_user, oauth2_scheme
     from jose import jwt, JWTError
     import os
 
-    # Validate token manually (can't use Depends in WS)
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
     ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
@@ -152,7 +133,6 @@ async def websocket_endpoint(
         return
 
     async with AsyncSessionLocal() as db:
-        # Verify participant
         result = await db.execute(
             select(Participant).where(
                 Participant.user_id == user_id,
@@ -176,6 +156,9 @@ async def websocket_endpoint(
             try:
                 payload_data = json.loads(data)
                 content = payload_data.get("content", "").strip()
+                message_type = payload_data.get("message_type", "text")
+                file_name = payload_data.get("file_name")
+                file_size = payload_data.get("file_size")
                 if not content:
                     continue
             except json.JSONDecodeError:
@@ -186,20 +169,15 @@ async def websocket_endpoint(
                     conversation_id=conversation_id,
                     sender_id=user_id,
                     content=content,
+                    message_type=message_type,
+                    file_name=file_name,
+                    file_size=file_size,
                 )
                 db.add(msg)
                 await db.commit()
                 await db.refresh(msg)
 
-                out = MessageOut(
-                    id=msg.id,
-                    conversation_id=msg.conversation_id,
-                    sender_id=msg.sender_id,
-                    sender_username=user.username,
-                    content=msg.content,
-                    sent_at=msg.sent_at,
-                    is_read=msg.is_read,
-                )
+                out = _build_message_out(msg, user)
                 await manager.broadcast(conversation_id, out.model_dump_json())
 
     except WebSocketDisconnect:
